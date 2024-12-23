@@ -1,171 +1,133 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+import numpy as np
+import os
+import splitfolders
+import matplotlib.pyplot as plt
 
-# C extensions
-*.so
+# tensorflow
+import tensorflow.keras as keras
+import tensorflow as tf
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+# image processing
+from tensorflow.keras.preprocessing import image
+from tensorflow.keras.preprocessing.image import ImageDataGenerator, load_img
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+# model / neural network
+from tensorflow.keras import layers
+from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.applications import ResNet50
+from tensorflow.keras.applications.resnet50 import preprocess_input
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+# Split data in a new folder named data-split
+splitfolders.ratio("C:/Users/indhu/OneDrive/Documents/data2/data", output="C:/Users/indhu/OneDrive/Documents/data2/data-split", seed=1337, ratio=(0.7, 0.2, 0.1), group_prefix=None, move=False) # Add a closing parenthesis
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
+datagen = ImageDataGenerator()
+class_names = ['cloudy','desert','green_area','water']
 
-# Translations
-*.mo
-*.pot
+# training data
+train_generator = datagen.flow_from_directory( 
+    directory="C:/Users/indhu/OneDrive/Documents/data2/data-split/train/", 
+    classes = class_names,
+    target_size=(224, 224),  
+    batch_size=32, 
+    class_mode="binary", 
+)
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
+# validation data
+valid_generator = datagen.flow_from_directory( 
+    directory="C:/Users/indhu/OneDrive/Documents/data2/data-split/val/", 
+    classes = class_names,
+    target_size=(224, 224), 
+    batch_size=32, 
+    class_mode="binary", 
+)
 
-# Flask stuff:
-instance/
-.webassets-cache
+# test data
+test_generator = datagen.flow_from_directory( 
+    directory="C:/Users/indhu/OneDrive/Documents/data2/data-split/test/", 
+    classes = class_names,
+    target_size=(224, 224), 
+    batch_size=32, 
+    class_mode="binary", 
+)
 
-# Scrapy stuff:
-.scrapy
+# ResNet50 model
+resnet_50 = ResNet50(include_top=False, weights='imagenet', input_shape=(224,224,3))
+for layer in resnet_50.layers:
+    layer.trainable = False
 
-# Sphinx documentation
-docs/_build/
+# Input shape
+input_shape = model.input_shape[1:]
+print("Input Shape:", input_shape)
 
-# PyBuilder
-.pybuilder/
-target/
+# Output shape
+output_shape = model.output_shape[1:]
+print("Output Shape:", output_shape)
 
-# Jupyter Notebook
-.ipynb_checkpoints
+# build the entire model
+x = resnet_50.output
+x = layers.GlobalAveragePooling2D()(x)
+x = layers.Dense(512, activation='relu')(x) 
+x = layers.Dropout(0.5)(x)
+x = layers.Dense(256, activation='relu')(x) 
+x = layers.Dropout(0.5)(x)
+x = layers.Dense(128, activation='relu')(x) 
+x = layers.Dropout(0.5)(x)
+x = layers.Dense(64, activation='relu')(x) 
+x = layers.Dropout(0.5)(x)
+predictions = layers.Dense(4, activation='softmax')(x)
+model = Model(inputs = resnet_50.input, outputs = predictions)
 
-# IPython
-profile_default/
-ipython_config.py
+# define training function
+def trainModel(model, epochs, optimizer):
+    batch_size = 32
+    model.compile(optimizer=optimizer, loss="sparse_categorical_crossentropy", metrics=["accuracy"])
+    return model.fit(train_generator, validation_data=valid_generator, epochs=epochs, batch_size=batch_size)
 
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
+# launch the training
+model_history = trainModel(model = model, epochs = 10, optimizer = "Adam")
 
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
+loss_train_curve = model_history.history["loss"]
+loss_val_curve = model_history.history["val_loss"]
+plt.plot(loss_train_curve, label = "Train")
+plt.plot(loss_val_curve, label = "Validation")
+plt.legend(loc = 'upper right')
+plt.title("Loss")
+plt.show()
 
-# UV
-#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#uv.lock
+acc_train_curve = model_history.history["accuracy"]
+acc_val_curve = model_history.history["val_accuracy"]
+plt.plot(acc_train_curve, label = "Train")
+plt.plot(acc_val_curve, label = "Validation")
+plt.legend(loc = 'lower right')
+plt.title("Accuracy")
+plt.show()
 
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
+test_loss, test_acc = model.evaluate(test_generator)
+print("The test loss is: ", test_loss)
+print("The best accuracy is: ", test_acc*100)
 
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#pdm.lock
-#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
-#   in version control.
-#   https://pdm.fming.dev/latest/usage/project/#working-with-version-control
-.pdm.toml
-.pdm-python
-.pdm-build/
+img = tf.keras.preprocessing.image.load_img(r'C:\Users\indhu\OneDrive\Documents\data2\data-split\test\cloudy\train_2231.jpg', target_size=(224, 224))
+img_array = tf.keras.preprocessing.image.img_to_array(img)
+img_array = np.array([img_array]) 
+img
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
 
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
+# generate predictions for samples
+predictions = model.predict(img_array)
+print(predictions)
 
-# SageMath parsed files
-*.sage.py
+# generate argmax for predictions
+class_id = np.argmax(predictions, axis = 1)
+print(class_id)
 
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+# transform classes number into classes name
+class_names[class_id.item()]
 
-# Spyder project settings
-.spyderproject
-.spyproject
+# Input shape
+input_shape = model.input_shape[1:]
+print("Input Shape:", input_shape)
 
-# Rope project settings
-.ropeproject
+# Output shape
+output_shape = model.output_shape[1:]
+print("Output Shape:", output_shape)
 
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
-
-# PyPI configuration file
-.pypirc
